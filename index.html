@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importar OFX</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+</head>
+<body>
+    <input type="file" id="arquivo" multiple />
+    <button id="btnImportar">Importar OFX</button>
+    <button id="btnExportar" style="display:none;">Exportar para Excel</button>
+    <div id="mensagem"></div>
+    <table id="tabelaDados" border="1">
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Data da Transação</th>
+                <th>Valor</th>
+                <th>Transação</th>
+                <th>Protocolo</th>
+                <th>Referência</th>
+                <th>Histórico</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Os dados serão inseridos aqui -->
+        </tbody>
+    </table>
+
+    <script>
+        // Importar e processar OFX
+        document.addEventListener("DOMContentLoaded", function () {
+            const btnImportar = document.getElementById("btnImportar");
+            const btnExportar = document.getElementById("btnExportar");
+            const arquivoInput = document.getElementById("arquivo");
+            const mensagem = document.getElementById("mensagem");
+            const tabelaDados = document.getElementById("tabelaDados").getElementsByTagName('tbody')[0];
+
+            if (btnImportar) {
+                // Limpa a mensagem ao carregar a página
+                mensagem.textContent = "";
+
+                // Função chamada ao clicar no botão "Importar"
+                btnImportar.addEventListener("click", function () {
+                    if (!arquivoInput.files.length) {
+                        mensagem.textContent = "Nenhum arquivo selecionado. Por favor, selecione arquivos OFX.";
+                        return;
+                    }
+
+                    mensagem.textContent = "Arquivos selecionados com sucesso. Iniciando a leitura...";
+                    console.log("Iniciando a leitura dos arquivos:", arquivoInput.files);
+                    
+                    // Processar cada arquivo selecionado
+                    Array.from(arquivoInput.files).forEach(file => {
+                        importarOfx(file);
+                    });
+                });
+            }
+
+            function importarOfx(file) {
+                const mensagem = document.getElementById("mensagem");
+                const reader = new FileReader();
+
+                reader.onload = function () {
+                    mensagem.textContent = `Arquivo OFX "${file.name}" carregado com sucesso. Processando dados...`;
+                    console.log("Conteúdo do arquivo:", reader.result); // Log do conteúdo do arquivo
+                    const lines = reader.result.split("\n");
+
+                    // Arrays para armazenar os dados extraídos
+                    const arrTipo = [];
+                    const arrDttransacao = [];
+                    const arrValor = [];
+                    const arrTransacao = [];
+                    const arrProtocolo = [];
+                    const arrReferencia = [];
+                    const arrHistorico = [];
+
+                    // Processamento das linhas do arquivo
+                    for (let line = 0; line < lines.length; line++) {
+                        const linha = lines[line].trim();
+                        console.log("Processando linha:", linha); // Log da linha sendo processada
+
+                        if (linha.startsWith("<TRNTYPE>")) {
+                            arrTipo.push(linha.replace("<TRNTYPE>", "").trim());
+                        } else if (linha.startsWith("<DTPOSTED>")) {
+                            const dt = linha.replace("<DTPOSTED>", "").trim();
+                            const ano = dt.substring(0, 4);
+                            const mes = dt.substring(4, 6);
+                            const dia = dt.substring(6, 8);
+                            arrDttransacao.push(`${dia}/${mes}/${ano}`);
+                        } else if (linha.startsWith("<TRNAMT>")) {
+                            const valor = linha.replace("<TRNAMT>", "").trim().replace(',', '.');
+                            arrValor.push(parseFloat(valor));
+                        } else if (linha.startsWith("<FITID>")) {
+                            arrTransacao.push(linha.replace("<FITID>", "").trim());
+                        } else if (linha.startsWith("<CHECKNUM>")) {
+                            arrProtocolo.push(linha.replace("<CHECKNUM>", "").trim());
+                        } else if (linha.startsWith("<REFNUM>")) {
+                            arrReferencia.push(linha.replace("<REFNUM>", "").trim());
+                        } else if (linha.startsWith ("<MEMO>")) {
+                            arrHistorico.push(linha.replace("<MEMO>", "").trim());
+                        }
+                    }
+
+                    if (arrTipo.length === 0) {
+                        mensagem.textContent = `Erro: O arquivo "${file.name}" não é um OFX válido.`;
+                        console.error(`Erro: O arquivo "${file.name}" não é um OFX válido.`); // Log de erro
+                        return;
+                    }
+
+                    // Criação de registros a partir dos dados extraídos
+                    const registros = arrTipo.map((tipo, index) => ({
+                        tipo,
+                        dttransacao: arrDttransacao[index] || '',
+                        valor: arrValor[index] || 0,
+                        transacao: arrTransacao[index] || '',
+                        protocolo: arrProtocolo[index] || '',
+                        referencia: arrReferencia[index] || '',
+                        historico: arrHistorico[index] || '',
+                    }));
+
+                    // Log dos registros criados
+                    console.log("Registros extraídos:", registros);
+
+                    // Exibir os dados na tabela
+                    registros.forEach(registro => {
+                        const row = tabelaDados.insertRow();
+                        row.insertCell(0).textContent = registro.tipo;
+                        row.insertCell(1).textContent = registro.dttransacao;
+                        row.insertCell(2).textContent = registro.valor.toFixed(2);
+                        row.insertCell(3).textContent = registro.transacao;
+                        row.insertCell(4).textContent = registro.protocolo;
+                        row.insertCell(5).textContent = registro.referencia;
+                        row.insertCell(6).textContent = registro.historico;
+                    });
+
+                    // Salvar os registros no localStorage
+                    localStorage.setItem("OFX", JSON.stringify(registros));
+                    mensagem.textContent = "Dados processados e salvos com sucesso!";
+                    console.log("Dados salvos no localStorage."); // Log de sucesso
+
+                    // Exibir o botão de exportação
+                    btnExportar.style.display = "block";
+                };
+
+                // Inicia a leitura do arquivo como texto
+                reader.readAsText(file);
+            }
+
+            // Função para exportar os dados da tabela para um arquivo Excel (.xls)
+            btnExportar.addEventListener("click", function () {
+                const rows = Array.from(tabelaDados.rows);
+                const data = rows.map(row => Array.from(row.cells).map(cell => cell.textContent));
+
+                // Criação de uma nova planilha
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Dados OFX");
+
+                // Geração do arquivo .xls
+                XLSX.writeFile(wb, "dados_ofx.xls");
+            });
+        });
+    </script>
+</body>
+</html>
